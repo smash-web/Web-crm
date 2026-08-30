@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Заказы — CRM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Firebase (заполните конфигурацию ниже, в разделе firebaseConfig) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#F2F5F6;
+    --surface:#FFFFFF;
+    --ink:#1B2430;
+    --muted:#6B7785;
+    --accent:#2A6F63;
+    --accent-dark:#1E534A;
+    --accent-soft:#E4F0EC;
+    --amber:#C98A2C;
+    --amber-soft:#FBF0DE;
+    --danger:#C1483D;
+    --danger-soft:#FBEAE8;
+    --border:#E4E8EA;
+    --radius:16px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--ink); overscroll-behavior:none;}
+  h1,h2,h3,.disp{font-family:'Manrope',sans-serif; font-weight:800;}
+  #app{max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; position:relative;}
+
+  header.top{padding:20px 18px 14px; background:var(--surface); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5;}
+  header.top .greet{font-size:13px; color:var(--muted); margin:0 0 2px;}
+  header.top h1{font-size:22px; margin:0;}
+
+  main{flex:1; padding:16px 16px 100px;}
+  .hidden{display:none !important;}
+
+  /* Signature: completion ring on Today tab */
+  .ring-card{background:var(--surface); border-radius:var(--radius); padding:20px; display:flex; align-items:center; gap:18px; margin-bottom:18px; box-shadow:0 1px 3px rgba(20,30,40,.05);}
+  .ring{width:74px; height:74px; flex-shrink:0;}
+  .ring-label{flex:1;}
+  .ring-label .n{font-size:26px; font-weight:800; font-family:'Manrope',sans-serif;}
+  .ring-label .l{font-size:13px; color:var(--muted); margin-top:2px;}
+
+  .section-label{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; margin:18px 0 8px; padding:0 2px;}
+  .section-label:first-child{margin-top:0;}
+
+  .order-card{background:var(--surface); border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; box-shadow:0 1px 3px rgba(20,30,40,.05); border-left:4px solid var(--accent); display:flex; gap:12px; align-items:flex-start;}
+  .order-card.done{border-left-color:#B7BEC4; opacity:.6;}
+  .order-check{width:24px; height:24px; border-radius:50%; border:2px solid var(--accent); flex-shrink:0; margin-top:2px; display:flex; align-items:center; justify-content:center; cursor:pointer;}
+  .order-check.checked{background:var(--accent);}
+  .order-check.checked:after{content:'✓'; color:#fff; font-size:14px; font-weight:700;}
+  .order-body{flex:1; min-width:0; cursor:pointer;}
+  .order-title{font-weight:700; font-size:15px; margin:0 0 3px;}
+  .order-title.done{text-decoration:line-through;}
+  .order-meta{font-size:13px; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 10px; margin-top:4px;}
+  .order-meta span{display:inline-flex; align-items:center; gap:4px;}
+  .order-sum{font-weight:700; color:var(--accent-dark); font-size:14px; white-space:nowrap; margin-left:auto; text-align:right;}
+  .order-photo-dot{width:6px; height:6px; border-radius:50%; background:var(--amber); display:inline-block;}
+
+  .empty{text-align:center; padding:50px 20px; color:var(--muted);}
+  .empty .big{font-size:38px; margin-bottom:8px;}
+  .empty p{margin:4px 0; font-size:14px;}
+
+  /* Search */
+  .search{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:11px 14px; font-size:14px; width:100%; margin-bottom:14px; font-family:inherit;}
+
+  /* Finance hero */
+  .hero-money{background:linear-gradient(135deg, var(--accent), var(--accent-dark)); border-radius:20px; padding:22px 20px; color:#fff; margin-bottom:16px;}
+  .hero-money .lab{font-size:13px; opacity:.85;}
+  .hero-money .val{font-family:'Manrope',sans-serif; font-weight:800; font-size:32px; margin:4px 0 14px;}
+  .hero-money .row{display:flex; justify-content:space-between; font-size:13px; opacity:.92; border-top:1px solid rgba(255,255,255,.25); padding-top:10px;}
+  .date-pick{display:flex; align-items:center; gap:10px; margin-bottom:14px;}
+  .date-pick input{flex:1; border:1px solid var(--border); border-radius:12px; padding:10px 12px; font-family:inherit; font-size:14px; background:var(--surface);}
+  .date-pick button{border:none; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 14px; font-size:13px; font-weight:600; color:var(--accent-dark);}
+
+  .exp-row{display:flex; justify-content:space-between; align-items:center; background:var(--surface); border-radius:12px; padding:12px 14px; margin-bottom:8px; box-shadow:0 1px 3px rgba(20,30,40,.05);}
+  .exp-row .t{font-size:14px; font-weight:600;}
+  .exp-row .c{font-size:12px; color:var(--muted);}
+  .exp-row .amt{font-weight:700; color:var(--danger); font-size:14px;}
+  .exp-del{background:none; border:none; color:var(--muted); font-size:18px; padding:2px 6px; cursor:pointer;}
+
+  .inc-row{display:flex; justify-content:space-between; align-items:center; background:var(--surface); border-radius:12px; padding:12px 14px; margin-bottom:8px; box-shadow:0 1px 3px rgba(20,30,40,.05); border-left:3px solid var(--accent);}
+  .inc-row .t{font-size:14px; font-weight:600;}
+  .inc-row .c{font-size:12px; color:var(--muted); margin-top:1px;}
+  .inc-row .amt{font-weight:700; color:var(--accent-dark); font-size:14px; white-space:nowrap;}
+
+  .week{display:flex; flex-direction:column; gap:6px; margin-top:6px;}
+  .week-row{display:flex; justify-content:space-between; font-size:13px; padding:8px 4px; border-bottom:1px solid var(--border);}
+  .week-row b{color:var(--accent-dark);}
+
+  .btn{border:none; border-radius:14px; padding:14px; font-weight:700; font-size:15px; font-family:inherit; width:100%; cursor:pointer;}
+  .btn-accent{background:var(--accent); color:#fff;}
+  .btn-ghost{background:var(--surface); color:var(--ink); border:1px solid var(--border);}
+  .btn-add-exp{background:var(--amber-soft); color:var(--amber); border:1px dashed var(--amber); border-radius:14px; padding:13px; width:100%; font-weight:700; font-size:14px; cursor:pointer;}
+
+  nav.tabs{position:sticky; bottom:0; background:var(--surface); border-top:1px solid var(--border); display:flex; padding:6px 6px calc(6px + env(safe-area-inset-bottom)); z-index:10;}
+  nav.tabs button{flex:1; background:none; border:none; padding:8px 4px; font-family:inherit; color:var(--muted); font-size:11px; font-weight:600; display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer;}
+  nav.tabs button .ic{font-size:20px;}
+  nav.tabs button.active{color:var(--accent);}
+
+  .fab{position:fixed; bottom:78px; left:50%; transform:translateX(calc(-50% + 190px)); width:56px; height:56px; border-radius:50%; background:var(--accent); color:#fff; font-size:28px; border:none; box-shadow:0 6px 16px rgba(42,111,99,.4); display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:9;}
+  @media (max-width:480px){ .fab{ left:auto; right:16px; transform:none; } }
+
+  /* Modal */
+  .modal-bg{position:fixed; inset:0; background:rgba(20,30,40,.45); z-index:20; display:flex; align-items:flex-end;}
+  .modal{background:var(--surface); width:100%; max-width:480px; margin:0 auto; border-radius:20px 20px 0 0; max-height:92vh; overflow-y:auto; padding:18px 18px calc(18px + env(safe-area-inset-bottom));}
+  .modal h2{font-size:18px; margin:0 0 16px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12px; font-weight:700; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:.03em;}
+  .field input, .field textarea{width:100%; border:1px solid var(--border); border-radius:12px; padding:11px 13px; font-family:inherit; font-size:15px; background:var(--bg);}
+  .field textarea{resize:vertical; min-height:60px;}
+  .row2{display:flex; gap:10px;}
+  .row2>.field{flex:1;}
+  .modal-actions{display:flex; gap:10px; margin-top:6px;}
+  .photo-preview{width:100%; border-radius:12px; margin-top:8px; max-height:180px; object-fit:cover; display:block;}
+  .photo-btn{display:inline-flex; align-items:center; gap:6px; background:var(--accent-soft); color:var(--accent-dark); border:none; border-radius:10px; padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;}
+  .close-x{position:absolute; top:14px; right:16px; background:var(--bg); border:none; width:32px; height:32px; border-radius:50%; font-size:16px; cursor:pointer;}
+  .modal{position:relative;}
+  .note{font-size:12px; color:var(--muted); margin-top:-6px; margin-bottom:14px; line-height:1.4;}
+
+  /* Setup notice + PIN gate */
+  #setupNotice{position:fixed; inset:0; background:var(--bg); z-index:100; display:flex; align-items:center; justify-content:center; padding:24px;}
+  #setupNotice .box{max-width:420px; background:var(--surface); border-radius:20px; padding:26px 22px; box-shadow:0 4px 20px rgba(20,30,40,.08);}
+  #setupNotice h2{margin:0 0 10px; font-size:19px;}
+  #setupNotice p{font-size:14px; color:var(--muted); line-height:1.5;}
+  #setupNotice code{background:var(--accent-soft); color:var(--accent-dark); padding:1px 6px; border-radius:6px; font-size:13px;}
+
+  #pinGate{position:fixed; inset:0; background:var(--bg); z-index:99; display:flex; align-items:center; justify-content:center; padding:24px;}
+  #pinGate .box{width:100%; max-width:340px; background:var(--surface); border-radius:20px; padding:28px 24px; box-shadow:0 4px 20px rgba(20,30,40,.08); text-align:center;}
+  #pinGate h2{margin:0 0 6px; font-size:19px;}
+  #pinGate p{font-size:13px; color:var(--muted); margin:0 0 18px;}
+  #pinGate input{width:100%; text-align:center; letter-spacing:.3em; font-size:20px; border:1px solid var(--border); border-radius:12px; padding:12px; font-family:inherit; margin-bottom:12px;}
+  #pinError{color:var(--danger); font-size:13px; min-height:18px; margin-bottom:6px;}
+</style>
+</head>
+<body>
+
+<!-- Показывается, если firebaseConfig ещё не заполнен -->
+<div id="setupNotice" class="hidden">
+  <div class="box">
+    <h2>⚙️ Осталось подключить базу данных</h2>
+    <p>Откройте файл в текстовом редакторе, найдите строку <code>const firebaseConfig = {</code> ближе к концу файла и вставьте туда данные вашего проекта Firebase (см. инструкцию, которую прислал Claude). После этого сохраните файл и обновите страницу.</p>
+  </div>
+</div>
+
+<!-- Простой PIN-экран, чтобы посторонние по ссылке не открыли базу -->
+<div id="pinGate" class="hidden">
+  <div class="box">
+    <h2>🔒 Вход</h2>
+    <p>Введите PIN-код, чтобы открыть базу заказов</p>
+    <input type="password" inputmode="numeric" maxlength="8" id="pinInput" placeholder="••••">
+    <div id="pinError"></div>
+    <button class="btn btn-accent" onclick="checkPin()">Войти</button>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+
+  <header class="top">
+    <p class="greet" id="dateNow"></p>
+    <h1 id="tabTitle">Сегодня</h1>
+  </header>
+
+  <main>
+    <!-- TODAY TAB -->
+    <div id="tab-today">
+      <div class="ring-card">
+        <svg class="ring" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="34" fill="none" stroke="#E4E8EA" stroke-width="9"/>
+          <circle id="ringProgress" cx="40" cy="40" r="34" fill="none" stroke="#2A6F63" stroke-width="9" stroke-linecap="round" transform="rotate(-90 40 40)"/>
+        </svg>
+        <div class="ring-label">
+          <div class="n" id="ringText">0 / 0</div>
+          <div class="l">заказов выполнено сегодня</div>
+        </div>
+      </div>
+      <div id="todayList"></div>
+    </div>
+
+    <!-- ORDERS TAB -->
+    <div id="tab-orders" class="hidden">
+      <input class="search" id="searchInput" placeholder="Поиск по имени, телефону, адресу...">
+      <div id="ordersList"></div>
+    </div>
+
+    <!-- FINANCE TAB -->
+    <div id="tab-finance" class="hidden">
+      <div class="date-pick">
+        <input type="date" id="financeDate">
+        <button onclick="setFinanceToday()">Сегодня</button>
+      </div>
+      <div class="hero-money">
+        <div class="lab">Прибыль за день</div>
+        <div class="val" id="profitVal">0 ₸</div>
+        <div class="row">
+          <span>Выручка: <b id="revVal"></b></span>
+          <span>Расходы: <b id="expVal"></b></span>
+        </div>
+      </div>
+      <button class="btn-ghost btn" style="margin-bottom:14px;" id="detailsToggleBtn" onclick="toggleFinanceDetails()">Подробнее ▾</button>
+      <div id="financeDetails" class="hidden">
+        <div class="section-label">Откуда пришли деньги</div>
+        <div id="detailsList"></div>
+      </div>
+
+      <div class="section-label">Расходы за день</div>
+      <div id="expensesList"></div>
+      <button class="btn-add-exp" onclick="openExpenseModal()">+ Добавить расход</button>
+
+      <div class="section-label">Прибыль за неделю</div>
+      <div class="week" id="weekList"></div>
+    </div>
+  </main>
+
+  <button class="fab" id="fabBtn" onclick="openOrderModal()">+</button>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="today" onclick="switchTab('today')"><span class="ic">📋</span>Сегодня</button>
+    <button class="tab-btn" data-tab="orders" onclick="switchTab('orders')"><span class="ic">🗂️</span>Заказы</button>
+    <button class="tab-btn" data-tab="finance" onclick="switchTab('finance')"><span class="ic">💰</span>Финансы</button>
+  </nav>
+</div>
+
+<!-- ORDER MODAL -->
+<div class="modal-bg hidden" id="orderModalBg">
+  <div class="modal">
+    <button class="close-x" onclick="closeOrderModal()">✕</button>
+    <h2 id="orderModalTitle">Новый заказ</h2>
+    <div class="field"><label>Наименование заказа</label><input id="f_name" placeholder="Напр. Букет + доставка"></div>
+    <div class="field"><label>Телефон клиента</label><input id="f_phone" type="tel" inputmode="tel" placeholder="+7 7XX XXX XX XX"></div>
+    <div class="row2">
+      <div class="field"><label>Дата</label><input id="f_date" type="date"></div>
+      <div class="field"><label>Время</label><input id="f_time" type="time"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Сумма заказа</label><input id="f_amount" type="number" inputmode="decimal" placeholder="0"></div>
+      <div class="field"><label>Предоплата</label><input id="f_prepay" type="number" inputmode="decimal" placeholder="0"></div>
+    </div>
+    <div class="field"><label>Адрес доставки</label><input id="f_address" placeholder="Улица, дом, квартира"></div>
+    <div class="field"><label>Комментарий</label><textarea id="f_comment" placeholder="Особые пожелания..."></textarea></div>
+    <div class="field">
+      <label>Фото</label>
+      <input type="file" accept="image/*" id="f_photoInput" class="hidden" onchange="handlePhoto(event)">
+      <button class="photo-btn" onclick="document.getElementById('f_photoInput').click()">🖼 Добавить фото (камера или галерея)</button>
+      <img id="photoPreview" class="photo-preview hidden">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="deleteOrderBtn" onclick="deleteCurrentOrder()">Удалить</button>
+      <button class="btn btn-accent" id="saveOrderBtn" onclick="saveOrder()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPENSE MODAL -->
+<div class="modal-bg hidden" id="expModalBg">
+  <div class="modal">
+    <button class="close-x" onclick="closeExpenseModal()">✕</button>
+    <h2>Новый расход</h2>
+    <div class="field"><label>Статья расхода</label><input id="e_category" placeholder="Напр. Закупка материалов"></div>
+    <div class="field"><label>Сумма</label><input id="e_amount" type="number" inputmode="decimal" placeholder="0"></div>
+    <div class="field"><label>Дата</label><input id="e_date" type="date"></div>
+    <div class="field"><label>Комментарий</label><input id="e_note" placeholder="Необязательно"></div>
+    <button class="btn btn-accent" id="saveExpenseBtn" onclick="saveExpense()">Сохранить</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   НАСТРОЙКА FIREBASE — вставьте сюда данные своего проекта.
+   Получить их: Firebase Console → Project settings → General →
+   "Your apps" → веб-приложение (значок </>) → скопировать firebaseConfig.
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyBFguCUay5sFTJHAHPWD9Pb08dRcyZEdlM",
+  authDomain: "moi-crm.firebaseapp.com",
+  projectId: "moi-crm",
+  storageBucket: "moi-crm.firebasestorage.app",
+  messagingSenderId: "144721582090",
+  appId: "1:144721582090:web:4c8b060975432cf60867f3"
+};
+
+/* Простой PIN для входа (поменяйте на свой) */
+const APP_PIN = "1234";
+
+let orders = [];
+let expenses = [];
+let currentTab = 'today';
+let editingOrderId = null;
+let pendingPhoto = null;
+let db = null, ordersRef = null, expensesRef = null;
+
+const todayStr = () => new Date().toISOString().slice(0,10);
+const fmtMoney = n => (Number(n)||0).toLocaleString('ru-RU') + ' ₸';
+const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('ru-RU', {day:'numeric', month:'long', weekday:'long'});
+
+document.getElementById('dateNow').textContent = fmtDate(todayStr());
+document.getElementById('f_date').value = todayStr();
+document.getElementById('financeDate').value = todayStr();
+document.getElementById('e_date').value = todayStr();
+
+function checkPin(){
+  const val = document.getElementById('pinInput').value.trim();
+  if(val === APP_PIN){
+    localStorage.setItem('crm_unlocked', '1');
+    document.getElementById('pinGate').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+  } else {
+    document.getElementById('pinError').textContent = 'Неверный PIN';
+  }
+}
+
+function initApp(){
+  const notConfigured = Object.values(firebaseConfig).some(v => v.includes('ВСТАВЬТЕ'));
+  if(notConfigured){
+    document.getElementById('setupNotice').classList.remove('hidden');
+    return;
+  }
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  ordersRef = db.collection('crm').doc('orders');
+  expensesRef = db.collection('crm').doc('expenses');
+
+  ordersRef.onSnapshot(snap => {
+    orders = (snap.exists && snap.data().list) ? snap.data().list : [];
+    renderAll();
+  }, err => console.error('orders sync error', err));
+
+  expensesRef.onSnapshot(snap => {
+    expenses = (snap.exists && snap.data().list) ? snap.data().list : [];
+    renderAll();
+  }, err => console.error('expenses sync error', err));
+
+  if(localStorage.getItem('crm_unlocked') === '1'){
+    document.getElementById('app').classList.remove('hidden');
+  } else {
+    document.getElementById('pinGate').classList.remove('hidden');
+  }
+}
+
+async function persistOrders(){
+  await ordersRef.set({ list: orders });
+}
+async function persistExpenses(){
+  await expensesRef.set({ list: expenses });
+}
+
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.getElementById('tab-today').classList.toggle('hidden', tab!=='today');
+  document.getElementById('tab-orders').classList.toggle('hidden', tab!=='orders');
+  document.getElementById('tab-finance').classList.toggle('hidden', tab!=='finance');
+  document.getElementById('fabBtn').classList.toggle('hidden', tab==='finance');
+  document.getElementById('tabTitle').textContent = tab==='today'?'Сегодня':tab==='orders'?'Все заказы':'Финансы';
+  renderAll();
+}
+
+function renderAll(){
+  renderToday();
+  renderOrders(document.getElementById('searchInput').value||'');
+  renderFinance();
+}
+
+function orderCardHtml(o){
+  const dt = o.date ? new Date(o.date+'T'+(o.time||'00:00')) : null;
+  const timeStr = o.time ? o.time : '';
+  return `<div class="order-card ${o.done?'done':''}">
+    <div class="order-check ${o.done?'checked':''}" onclick="toggleDone('${o.id}', event)"></div>
+    <div class="order-body" onclick="openOrderModal('${o.id}')">
+      <p class="order-title ${o.done?'done':''}">${escapeHtml(o.name||'Без названия')}</p>
+      <div class="order-meta">
+        ${timeStr?`<span>🕒 ${timeStr}</span>`:''}
+        ${o.phone?`<span>📞 ${escapeHtml(o.phone)}</span>`:''}
+        ${o.address?`<span>📍 ${escapeHtml(o.address)}</span>`:''}
+        ${o.photo?`<span class="order-photo-dot"></span>фото`:''}
+      </div>
+    </div>
+    <div class="order-sum">${o.amount?fmtMoney(o.amount):''}${o.prepay?`<div style="font-size:11px;color:var(--muted);font-weight:400;">аванс ${fmtMoney(o.prepay)}</div>`:''}</div>
+  </div>`;
+}
+
+function renderToday(){
+  const list = orders.filter(o=>o.date===todayStr()).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  const done = list.filter(o=>o.done).length;
+  const total = list.length;
+  const pct = total? done/total : 0;
+  const circ = 2*Math.PI*34;
+  document.getElementById('ringProgress').setAttribute('stroke-dasharray', `${circ*pct} ${circ}`);
+  document.getElementById('ringText').textContent = `${done} / ${total}`;
+  const box = document.getElementById('todayList');
+  if(!list.length){
+    box.innerHTML = `<div class="empty"><div class="big">📭</div><p><b>На сегодня пока пусто</b></p><p>Нажмите «+», чтобы принять новый заказ</p></div>`;
+    return;
+  }
+  box.innerHTML = list.map(orderCardHtml).join('');
+}
+
+function renderOrders(filter){
+  const f = filter.trim().toLowerCase();
+  let list = [...orders].sort((a,b)=> (b.date+b.time).localeCompare(a.date+a.time));
+  if(f){
+    list = list.filter(o => [o.name,o.phone,o.address,o.comment].filter(Boolean).join(' ').toLowerCase().includes(f));
+  }
+  const box = document.getElementById('ordersList');
+  if(!list.length){
+    box.innerHTML = `<div class="empty"><div class="big">🗂️</div><p><b>Заказов пока нет</b></p></div>`;
+    return;
+  }
+  box.innerHTML = list.map(o=>`<div class="section-label" data-d="${o.date}" style="display:none"></div>`+orderCardHtml(o)).join('');
+}
+document.getElementById('searchInput').addEventListener('input', e=>renderOrders(e.target.value));
+
+function toggleDone(id, ev){
+  ev.stopPropagation();
+  const o = orders.find(x=>x.id===id);
+  if(o){
+    o.done = !o.done;
+    o.doneAt = o.done ? todayStr() : null; // день, когда остаток заказа засчитывается в прибыль
+    persistOrders();
+    renderAll();
+  }
+}
+
+// ---- Order modal ----
+function openOrderModal(id){
+  editingOrderId = id || null;
+  pendingPhoto = null;
+  const bg = document.getElementById('orderModalBg');
+  const preview = document.getElementById('photoPreview');
+  preview.classList.add('hidden'); preview.src='';
+  if(id){
+    const o = orders.find(x=>x.id===id);
+    document.getElementById('orderModalTitle').textContent = 'Заказ';
+    document.getElementById('f_name').value = o.name||'';
+    document.getElementById('f_phone').value = o.phone||'';
+    document.getElementById('f_date').value = o.date||todayStr();
+    document.getElementById('f_time').value = o.time||'';
+    document.getElementById('f_amount').value = o.amount||'';
+    document.getElementById('f_prepay').value = o.prepay||'';
+    document.getElementById('f_address').value = o.address||'';
+    document.getElementById('f_comment').value = o.comment||'';
+    if(o.photo){ preview.src=o.photo; preview.classList.remove('hidden'); pendingPhoto=o.photo; }
+    document.getElementById('deleteOrderBtn').classList.remove('hidden');
+  } else {
+    document.getElementById('orderModalTitle').textContent = 'Новый заказ';
+    ['f_name','f_phone','f_time','f_amount','f_prepay','f_address','f_comment'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('f_date').value = todayStr();
+    document.getElementById('deleteOrderBtn').classList.add('hidden');
+  }
+  bg.classList.remove('hidden');
+}
+function closeOrderModal(){ document.getElementById('orderModalBg').classList.add('hidden'); }
+
+function handlePhoto(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const img = new Image();
+  const reader = new FileReader();
+  reader.onload = e => {
+    img.onload = () => {
+      const maxW = 900;
+      const scale = Math.min(1, maxW/img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width*scale; canvas.height = img.height*scale;
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+      pendingPhoto = dataUrl;
+      const preview = document.getElementById('photoPreview');
+      preview.src = dataUrl; preview.classList.remove('hidden');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+let savingOrder = false;
+async function saveOrder(){
+  if(savingOrder) return; // guard against double-tap / double submit
+  const name = document.getElementById('f_name').value.trim();
+  if(!name){ alert('Укажите наименование заказа'); return; }
+  savingOrder = true;
+  const btn = document.getElementById('saveOrderBtn');
+  const prevLabel = btn.textContent;
+  btn.disabled = true; btn.style.opacity = '.6'; btn.textContent = 'Сохранение...';
+
+  const data = {
+    name,
+    phone: document.getElementById('f_phone').value.trim(),
+    date: document.getElementById('f_date').value || todayStr(),
+    time: document.getElementById('f_time').value,
+    amount: parseFloat(document.getElementById('f_amount').value)||0,
+    prepay: parseFloat(document.getElementById('f_prepay').value)||0,
+    address: document.getElementById('f_address').value.trim(),
+    comment: document.getElementById('f_comment').value.trim(),
+    photo: pendingPhoto || null,
+  };
+
+  // snapshot so we can roll back if saving fails
+  const snapshot = JSON.stringify(orders);
+  let newId = null;
+  if(editingOrderId){
+    const o = orders.find(x=>x.id===editingOrderId);
+    Object.assign(o, data);
+  } else {
+    newId = 'o'+Date.now()+Math.random().toString(36).slice(2,7);
+    orders.push({ id: newId, done:false, doneAt:null, acceptedDate: todayStr(), createdAt: Date.now(), ...data });
+  }
+
+  try{
+    await persistOrders();
+    closeOrderModal();
+    renderAll();
+  }catch(e){
+    orders = JSON.parse(snapshot); // roll back the local change since it wasn't saved
+    alert('Не удалось сохранить заказ. Проверьте соединение и попробуйте ещё раз.');
+  }finally{
+    savingOrder = false;
+    btn.disabled = false; btn.style.opacity = '1'; btn.textContent = prevLabel;
+  }
+}
+async function deleteCurrentOrder(){
+  if(!editingOrderId) return;
+  if(!confirm('Удалить этот заказ?')) return;
+  orders = orders.filter(o=>o.id!==editingOrderId);
+  await persistOrders();
+  closeOrderModal();
+  renderAll();
+}
+
+// ---- Finance ----
+function setFinanceToday(){ document.getElementById('financeDate').value = todayStr(); renderFinance(); }
+document.getElementById('financeDate').addEventListener('change', renderFinance);
+
+let financeDetailsOpen = false;
+function toggleFinanceDetails(){
+  financeDetailsOpen = !financeDetailsOpen;
+  document.getElementById('financeDetails').classList.toggle('hidden', !financeDetailsOpen);
+  document.getElementById('detailsToggleBtn').textContent = financeDetailsOpen ? 'Скрыть ▴' : 'Подробнее ▾';
+}
+
+// Деньги считаются в день, когда они фактически получены:
+// - предоплата — в день приёма заказа (acceptedDate)
+// - остаток суммы — в день, когда заказ отмечен выполненным (doneAt)
+function revenueEntriesForDate(date){
+  const entries = [];
+  orders.forEach(o=>{
+    const prepay = Number(o.prepay)||0;
+    const amount = Number(o.amount)||0;
+    const remainder = amount - prepay;
+    const acceptedDate = o.acceptedDate || (o.createdAt ? new Date(o.createdAt).toISOString().slice(0,10) : o.date);
+    const doneDate = o.doneAt || (o.done ? o.date : null); // подстраховка для старых заказов
+    if(prepay>0 && acceptedDate===date){
+      entries.push({order:o, type:'prepay', amount:prepay});
+    }
+    if(o.done && doneDate===date && remainder>0){
+      entries.push({order:o, type:'remainder', amount:remainder});
+    }
+  });
+  return entries;
+}
+
+function renderFinance(){
+  const date = document.getElementById('financeDate').value || todayStr();
+  const entries = revenueEntriesForDate(date);
+  const dayExpenses = expenses.filter(e=>e.date===date);
+  const revenue = entries.reduce((s,e)=>s+e.amount,0);
+  const expSum = dayExpenses.reduce((s,e)=>s+(Number(e.amount)||0),0);
+  document.getElementById('profitVal').textContent = fmtMoney(revenue-expSum);
+  document.getElementById('revVal').textContent = fmtMoney(revenue);
+  document.getElementById('expVal').textContent = fmtMoney(expSum);
+
+  const detailsBox = document.getElementById('detailsList');
+  detailsBox.innerHTML = entries.length ? entries.map(en=>`
+    <div class="inc-row">
+      <div>
+        <div class="t">${escapeHtml(en.order.name||'Заказ')}</div>
+        <div class="c">${en.type==='prepay' ? 'Предоплата при приёме заказа' : 'Остаток — заказ выполнен'}${en.order.date? ' · срок '+new Date(en.order.date+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short'}):''}</div>
+      </div>
+      <div class="amt">+${fmtMoney(en.amount)}</div>
+    </div>`).join('') : `<div class="empty" style="padding:20px;"><p>За этот день поступлений ещё нет</p></div>`;
+
+  const box = document.getElementById('expensesList');
+  box.innerHTML = dayExpenses.length ? dayExpenses.map(e=>`
+    <div class="exp-row">
+      <div><div class="t">${escapeHtml(e.category||'Расход')}</div><div class="c">${escapeHtml(e.note||'')}</div></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="amt">-${fmtMoney(e.amount)}</div>
+        <button class="exp-del" onclick="deleteExpense('${e.id}')">🗑</button>
+      </div>
+    </div>`).join('') : `<div class="empty" style="padding:20px;"><p>Расходов за этот день нет</p></div>`;
+
+  // week summary
+  const days = [];
+  for(let i=6;i>=0;i--){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const ds = d.toISOString().slice(0,10);
+    const rev = revenueEntriesForDate(ds).reduce((s,e)=>s+e.amount,0);
+    const exp = expenses.filter(e=>e.date===ds).reduce((s,e)=>s+(Number(e.amount)||0),0);
+    days.push({ds, profit: rev-exp});
+  }
+  document.getElementById('weekList').innerHTML = days.map(d=>`
+    <div class="week-row"><span>${new Date(d.ds+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short',weekday:'short'})}</span><b>${fmtMoney(d.profit)}</b></div>
+  `).join('');
+}
+
+function openExpenseModal(){
+  document.getElementById('e_category').value='';
+  document.getElementById('e_amount').value='';
+  document.getElementById('e_note').value='';
+  document.getElementById('e_date').value = document.getElementById('financeDate').value || todayStr();
+  document.getElementById('expModalBg').classList.remove('hidden');
+}
+function closeExpenseModal(){ document.getElementById('expModalBg').classList.add('hidden'); }
+let savingExpense = false;
+async function saveExpense(){
+  if(savingExpense) return;
+  const amount = parseFloat(document.getElementById('e_amount').value)||0;
+  if(amount<=0){ alert('Укажите сумму расхода'); return; }
+  savingExpense = true;
+  const btn = document.getElementById('saveExpenseBtn');
+  const prevLabel = btn.textContent;
+  btn.disabled = true; btn.style.opacity = '.6'; btn.textContent = 'Сохранение...';
+
+  const snapshot = JSON.stringify(expenses);
+  expenses.push({
+    id:'e'+Date.now()+Math.random().toString(36).slice(2,7),
+    category: document.getElementById('e_category').value.trim()||'Расход',
+    amount,
+    date: document.getElementById('e_date').value||todayStr(),
+    note: document.getElementById('e_note').value.trim(),
+  });
+
+  try{
+    await persistExpenses();
+    closeExpenseModal();
+    renderFinance();
+  }catch(e){
+    expenses = JSON.parse(snapshot);
+    alert('Не удалось сохранить расход. Попробуйте ещё раз.');
+  }finally{
+    savingExpense = false;
+    btn.disabled = false; btn.style.opacity = '1'; btn.textContent = prevLabel;
+  }
+}
+async function deleteExpense(id){
+  expenses = expenses.filter(e=>e.id!==id);
+  await persistExpenses();
+  renderFinance();
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+initApp();
+</script>
+</body>
+</html>
