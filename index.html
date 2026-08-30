@@ -87,6 +87,18 @@
   .inc-row .c{font-size:12px; color:var(--muted); margin-top:1px;}
   .inc-row .amt{font-weight:700; color:var(--accent-dark); font-size:14px; white-space:nowrap;}
 
+  .period-tabs{display:flex; gap:6px; margin-bottom:12px;}
+  .period-btn{flex:1; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:9px 4px; font-size:12px; font-weight:700; color:var(--muted); font-family:inherit;}
+  .period-btn.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .period-nav{display:flex; align-items:center; gap:10px; margin-bottom:12px;}
+  .period-nav button{background:var(--surface); border:1px solid var(--border); border-radius:10px; width:38px; height:38px; font-size:18px; color:var(--accent-dark); flex-shrink:0;}
+  .period-label{font-weight:700; font-size:14px; text-align:center; flex:1;}
+  .stats-row{display:flex; gap:10px; margin-bottom:14px;}
+  .stat-chip{flex:1; background:var(--surface); border-radius:12px; padding:10px; text-align:center; box-shadow:0 1px 3px rgba(20,30,40,.05);}
+  .stat-chip .n{font-weight:800; font-size:18px; font-family:'Manrope',sans-serif;}
+  .stat-chip .l{font-size:11px; color:var(--muted); margin-top:2px;}
+  .hero-money.negative{background:linear-gradient(135deg, var(--danger), #8f332b);}
+
   .week{display:flex; flex-direction:column; gap:6px; margin-top:6px;}
   .week-row{display:flex; justify-content:space-between; font-size:13px; padding:8px 4px; border-bottom:1px solid var(--border);}
   .week-row b{color:var(--accent-dark);}
@@ -188,30 +200,44 @@
 
     <!-- FINANCE TAB -->
     <div id="tab-finance" class="hidden">
-      <div class="date-pick">
-        <input type="date" id="financeDate">
-        <button onclick="setFinanceToday()">Сегодня</button>
+      <div class="period-tabs">
+        <button class="period-btn active" data-p="day" onclick="setPeriodType('day')">День</button>
+        <button class="period-btn" data-p="week" onclick="setPeriodType('week')">Неделя</button>
+        <button class="period-btn" data-p="month" onclick="setPeriodType('month')">Месяц</button>
+        <button class="period-btn" data-p="range" onclick="setPeriodType('range')">Период</button>
       </div>
+
+      <div class="period-nav" id="periodNavDefault">
+        <button onclick="shiftPeriod(-1)">‹</button>
+        <div class="period-label" id="periodLabel">—</div>
+        <button onclick="shiftPeriod(1)">›</button>
+      </div>
+      <div class="row2 hidden" id="rangeInputs">
+        <div class="field"><label>С</label><input type="date" id="rangeStart"></div>
+        <div class="field"><label>По</label><input type="date" id="rangeEnd"></div>
+      </div>
+
       <div class="hero-money">
-        <div class="lab">Прибыль за день</div>
+        <div class="lab">Прибыль</div>
         <div class="val" id="profitVal">0 ₸</div>
         <div class="row">
           <span>Выручка: <b id="revVal"></b></span>
           <span>Расходы: <b id="expVal"></b></span>
         </div>
       </div>
+
+      <div class="stats-row" id="statsRow"></div>
+
       <button class="btn-ghost btn" style="margin-bottom:14px;" id="detailsToggleBtn" onclick="toggleFinanceDetails()">Подробнее ▾</button>
       <div id="financeDetails" class="hidden">
         <div class="section-label">Откуда пришли деньги</div>
         <div id="detailsList"></div>
+        <div class="section-label">Расходы</div>
+        <div id="expensesList"></div>
       </div>
 
-      <div class="section-label">Расходы за день</div>
-      <div id="expensesList"></div>
       <button class="btn-add-exp" onclick="openExpenseModal()">+ Добавить расход</button>
-
-      <div class="section-label">Прибыль за неделю</div>
-      <div class="week" id="weekList"></div>
+      <button class="btn btn-accent" style="margin-top:12px;" onclick="downloadReport()">📄 Скачать отчёт</button>
     </div>
   </main>
 
@@ -298,8 +324,11 @@ const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('ru-RU', {day:'n
 
 document.getElementById('dateNow').textContent = fmtDate(todayStr());
 document.getElementById('f_date').value = todayStr();
-document.getElementById('financeDate').value = todayStr();
 document.getElementById('e_date').value = todayStr();
+document.getElementById('rangeStart').value = todayStr();
+document.getElementById('rangeEnd').value = todayStr();
+document.getElementById('rangeStart').addEventListener('change', ()=>{ if(periodType==='range') renderFinance(); });
+document.getElementById('rangeEnd').addEventListener('change', ()=>{ if(periodType==='range') renderFinance(); });
 
 function checkPin(){
   const val = document.getElementById('pinInput').value.trim();
@@ -398,9 +427,17 @@ function renderToday(){
   box.innerHTML = list.map(orderCardHtml).join('');
 }
 
+function orderWord(n){
+  const mod10=n%10, mod100=n%100;
+  if(mod100>=11&&mod100<=14) return 'заказов';
+  if(mod10===1) return 'заказ';
+  if(mod10>=2&&mod10<=4) return 'заказа';
+  return 'заказов';
+}
+
 function renderOrders(filter){
   const f = filter.trim().toLowerCase();
-  let list = [...orders].sort((a,b)=> (b.date+b.time).localeCompare(a.date+a.time));
+  let list = [...orders];
   if(f){
     list = list.filter(o => [o.name,o.phone,o.address,o.comment].filter(Boolean).join(' ').toLowerCase().includes(f));
   }
@@ -409,7 +446,18 @@ function renderOrders(filter){
     box.innerHTML = `<div class="empty"><div class="big">🗂️</div><p><b>Заказов пока нет</b></p></div>`;
     return;
   }
-  box.innerHTML = list.map(o=>`<div class="section-label" data-d="${o.date}" style="display:none"></div>`+orderCardHtml(o)).join('');
+  const groups = {};
+  list.forEach(o=>{
+    const d = o.date || 'без-даты';
+    if(!groups[d]) groups[d] = [];
+    groups[d].push(o);
+  });
+  const dates = Object.keys(groups).sort((a,b)=>b.localeCompare(a));
+  box.innerHTML = dates.map(d=>{
+    const dayOrders = groups[d].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+    const label = d==='без-даты' ? 'Без даты' : new Date(d+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+    return `<div class="section-label">${label} · ${dayOrders.length} ${orderWord(dayOrders.length)}</div>` + dayOrders.map(orderCardHtml).join('');
+  }).join('');
 }
 document.getElementById('searchInput').addEventListener('input', e=>renderOrders(e.target.value));
 
@@ -531,8 +579,55 @@ async function deleteCurrentOrder(){
 }
 
 // ---- Finance ----
-function setFinanceToday(){ document.getElementById('financeDate').value = todayStr(); renderFinance(); }
-document.getElementById('financeDate').addEventListener('change', renderFinance);
+let periodType = 'day';
+let refDate = new Date();
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+function toDateStr(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+
+function setPeriodType(type){
+  periodType = type;
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.toggle('active', b.dataset.p===type));
+  document.getElementById('periodNavDefault').classList.toggle('hidden', type==='range');
+  document.getElementById('rangeInputs').classList.toggle('hidden', type!=='range');
+  renderFinance();
+}
+
+function shiftPeriod(dir){
+  if(periodType==='day') refDate.setDate(refDate.getDate()+dir);
+  else if(periodType==='week') refDate.setDate(refDate.getDate()+dir*7);
+  else if(periodType==='month') refDate.setMonth(refDate.getMonth()+dir);
+  renderFinance();
+}
+
+function getPeriodRange(){
+  if(periodType==='range'){
+    const s = document.getElementById('rangeStart').value || todayStr();
+    const e = document.getElementById('rangeEnd').value || todayStr();
+    return s<=e ? [s,e] : [e,s];
+  }
+  if(periodType==='week'){
+    const day = refDate.getDay();
+    const diffToMon = (day===0 ? -6 : 1-day);
+    const mon = new Date(refDate); mon.setDate(refDate.getDate()+diffToMon);
+    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    return [toDateStr(mon), toDateStr(sun)];
+  }
+  if(periodType==='month'){
+    const first = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+    const last = new Date(refDate.getFullYear(), refDate.getMonth()+1, 0);
+    return [toDateStr(first), toDateStr(last)];
+  }
+  const d = toDateStr(refDate);
+  return [d,d];
+}
+
+function periodLabelText(start,end){
+  const sD = new Date(start+'T00:00:00'), eD = new Date(end+'T00:00:00');
+  if(periodType==='day') return sD.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+  if(periodType==='month') return sD.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+  return `${sD.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} – ${eD.toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'numeric'})}`;
+}
 
 let financeDetailsOpen = false;
 function toggleFinanceDetails(){
@@ -562,55 +657,131 @@ function revenueEntriesForDate(date){
   return entries;
 }
 
-function renderFinance(){
-  const date = document.getElementById('financeDate').value || todayStr();
-  const entries = revenueEntriesForDate(date);
-  const dayExpenses = expenses.filter(e=>e.date===date);
-  const revenue = entries.reduce((s,e)=>s+e.amount,0);
-  const expSum = dayExpenses.reduce((s,e)=>s+(Number(e.amount)||0),0);
-  document.getElementById('profitVal').textContent = fmtMoney(revenue-expSum);
-  document.getElementById('revVal').textContent = fmtMoney(revenue);
-  document.getElementById('expVal').textContent = fmtMoney(expSum);
+function computeRangeData(start,end){
+  const dates = [];
+  let cur = new Date(start+'T00:00:00');
+  const endD = new Date(end+'T00:00:00');
+  while(cur<=endD){ dates.push(toDateStr(cur)); cur.setDate(cur.getDate()+1); }
 
+  let incomeEntries = [];
+  dates.forEach(d => { incomeEntries = incomeEntries.concat(revenueEntriesForDate(d).map(e=>({...e, date:d}))); });
+  const revenue = incomeEntries.reduce((s,e)=>s+e.amount,0);
+
+  const rangeExpenses = expenses.filter(e=>e.date>=start && e.date<=end).sort((a,b)=>a.date.localeCompare(b.date));
+  const expSum = rangeExpenses.reduce((s,e)=>s+(Number(e.amount)||0),0);
+
+  const acceptedCount = orders.filter(o=>{
+    const acc = o.acceptedDate || (o.createdAt ? new Date(o.createdAt).toISOString().slice(0,10) : o.date);
+    return acc>=start && acc<=end;
+  }).length;
+  const doneCount = orders.filter(o=>{
+    const dd = o.doneAt || (o.done ? o.date : null);
+    return o.done && dd>=start && dd<=end;
+  }).length;
+
+  return { start, end, incomeEntries, revenue, rangeExpenses, expSum, acceptedCount, doneCount, profit: revenue-expSum };
+}
+
+function renderFinance(){
+  const [start,end] = getPeriodRange();
+  document.getElementById('periodLabel').textContent = periodLabelText(start,end);
+  const data = computeRangeData(start,end);
+
+  const sign = data.profit>0 ? '+' : '';
+  document.getElementById('profitVal').textContent = sign + fmtMoney(data.profit);
+  document.getElementById('revVal').textContent = fmtMoney(data.revenue);
+  document.getElementById('expVal').textContent = fmtMoney(data.expSum);
+  document.querySelector('.hero-money').classList.toggle('negative', data.profit<0);
+
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-chip"><div class="n">${data.acceptedCount}</div><div class="l">заказов принято</div></div>
+    <div class="stat-chip"><div class="n">${data.doneCount}</div><div class="l">заказов выполнено</div></div>
+  `;
+
+  const sortedIncome = [...data.incomeEntries].sort((a,b)=>a.date.localeCompare(b.date));
   const detailsBox = document.getElementById('detailsList');
-  detailsBox.innerHTML = entries.length ? entries.map(en=>`
+  detailsBox.innerHTML = sortedIncome.length ? sortedIncome.map(en=>`
     <div class="inc-row">
       <div>
         <div class="t">${escapeHtml(en.order.name||'Заказ')}</div>
-        <div class="c">${en.type==='prepay' ? 'Предоплата при приёме заказа' : 'Остаток — заказ выполнен'}${en.order.date? ' · срок '+new Date(en.order.date+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short'}):''}</div>
+        <div class="c">${en.type==='prepay' ? 'Предоплата' : 'Остаток'} · ${new Date(en.date+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</div>
       </div>
       <div class="amt">+${fmtMoney(en.amount)}</div>
-    </div>`).join('') : `<div class="empty" style="padding:20px;"><p>За этот день поступлений ещё нет</p></div>`;
+    </div>`).join('') : `<div class="empty" style="padding:20px;"><p>За этот период поступлений нет</p></div>`;
 
   const box = document.getElementById('expensesList');
-  box.innerHTML = dayExpenses.length ? dayExpenses.map(e=>`
+  box.innerHTML = data.rangeExpenses.length ? data.rangeExpenses.map(e=>`
     <div class="exp-row">
-      <div><div class="t">${escapeHtml(e.category||'Расход')}</div><div class="c">${escapeHtml(e.note||'')}</div></div>
+      <div><div class="t">${escapeHtml(e.category||'Расход')}</div><div class="c">${escapeHtml(e.note||'')} · ${new Date(e.date+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</div></div>
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="amt">-${fmtMoney(e.amount)}</div>
         <button class="exp-del" onclick="deleteExpense('${e.id}')">🗑</button>
       </div>
-    </div>`).join('') : `<div class="empty" style="padding:20px;"><p>Расходов за этот день нет</p></div>`;
+    </div>`).join('') : `<div class="empty" style="padding:20px;"><p>Расходов за этот период нет</p></div>`;
+}
 
-  // week summary
-  const days = [];
-  for(let i=6;i>=0;i--){
-    const d = new Date(); d.setDate(d.getDate()-i);
-    const ds = d.toISOString().slice(0,10);
-    const rev = revenueEntriesForDate(ds).reduce((s,e)=>s+e.amount,0);
-    const exp = expenses.filter(e=>e.date===ds).reduce((s,e)=>s+(Number(e.amount)||0),0);
-    days.push({ds, profit: rev-exp});
-  }
-  document.getElementById('weekList').innerHTML = days.map(d=>`
-    <div class="week-row"><span>${new Date(d.ds+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short',weekday:'short'})}</span><b>${fmtMoney(d.profit)}</b></div>
-  `).join('');
+function downloadReport(){
+  const [start,end] = getPeriodRange();
+  const data = computeRangeData(start,end);
+  const periodTitle = periodLabelText(start,end);
+  const sortedIncome = [...data.incomeEntries].sort((a,b)=>a.date.localeCompare(b.date));
+
+  const html = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Отчёт — ${periodTitle}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif; padding:24px; color:#1B2430; max-width:720px; margin:0 auto;}
+  h1{font-size:20px; margin-bottom:4px;}
+  .sub{color:#6B7785; font-size:13px; margin-bottom:20px;}
+  h2{font-size:15px; margin-top:30px; border-bottom:2px solid #2A6F63; padding-bottom:6px;}
+  table{width:100%; border-collapse:collapse; margin-top:10px;}
+  th,td{text-align:left; padding:7px 8px; border-bottom:1px solid #E4E8EA; font-size:13px;}
+  th{background:#F2F5F6;}
+  .plus{color:#2A6F63; font-weight:700;} .minus{color:#C1483D; font-weight:700;}
+  .summary{display:flex; gap:16px; margin-top:16px; flex-wrap:wrap;}
+  .box{flex:1; min-width:140px; background:#F2F5F6; border-radius:12px; padding:14px 16px;}
+  .box .l{font-size:12px; color:#6B7785;}
+  .box .n{font-size:20px; font-weight:800; margin-top:2px;}
+  .foot{margin-top:34px; color:#6B7785; font-size:12px;}
+</style></head><body>
+  <h1>Отчёт по заказам и финансам</h1>
+  <div class="sub">Период: ${periodTitle}</div>
+
+  <div class="summary">
+    <div class="box"><div class="l">Выручка</div><div class="n">${fmtMoney(data.revenue)}</div></div>
+    <div class="box"><div class="l">Расходы</div><div class="n">${fmtMoney(data.expSum)}</div></div>
+    <div class="box"><div class="l">Итог</div><div class="n ${data.profit>=0?'plus':'minus'}">${data.profit>=0?'+':''}${fmtMoney(data.profit)}</div></div>
+    <div class="box"><div class="l">Заказов принято</div><div class="n">${data.acceptedCount}</div></div>
+    <div class="box"><div class="l">Заказов выполнено</div><div class="n">${data.doneCount}</div></div>
+  </div>
+
+  <h2>Доходы — откуда пришли деньги</h2>
+  <table><tr><th>Дата</th><th>Заказ</th><th>Тип поступления</th><th>Сумма</th></tr>
+  ${sortedIncome.map(en=>`<tr><td>${new Date(en.date+'T00:00:00').toLocaleDateString('ru-RU')}</td><td>${escapeHtml(en.order.name||'')}</td><td>${en.type==='prepay'?'Предоплата':'Остаток'}</td><td>+${fmtMoney(en.amount)}</td></tr>`).join('') || '<tr><td colspan="4">Нет данных за этот период</td></tr>'}
+  </table>
+
+  <h2>Расходы — куда ушли деньги</h2>
+  <table><tr><th>Дата</th><th>Статья</th><th>Комментарий</th><th>Сумма</th></tr>
+  ${data.rangeExpenses.map(e=>`<tr><td>${new Date(e.date+'T00:00:00').toLocaleDateString('ru-RU')}</td><td>${escapeHtml(e.category||'')}</td><td>${escapeHtml(e.note||'')}</td><td>-${fmtMoney(e.amount)}</td></tr>`).join('') || '<tr><td colspan="4">Нет данных за этот период</td></tr>'}
+  </table>
+
+  <div class="foot">Сформировано: ${new Date().toLocaleString('ru-RU')}</div>
+</body></html>`;
+
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `otchet_${start}_${end}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function openExpenseModal(){
   document.getElementById('e_category').value='';
   document.getElementById('e_amount').value='';
   document.getElementById('e_note').value='';
-  document.getElementById('e_date').value = document.getElementById('financeDate').value || todayStr();
+  document.getElementById('e_date').value = todayStr();
   document.getElementById('expModalBg').classList.remove('hidden');
 }
 function closeExpenseModal(){ document.getElementById('expModalBg').classList.add('hidden'); }
