@@ -318,7 +318,7 @@ let editingOrderId = null;
 let pendingPhoto = null;
 let db = null, ordersRef = null, expensesRef = null;
 
-const todayStr = () => new Date().toISOString().slice(0,10);
+const todayStr = () => toDateStr(new Date());
 const fmtMoney = n => (Number(n)||0).toLocaleString('ru-RU') + ' ₸';
 const fmtDate = d => new Date(d+'T00:00:00').toLocaleDateString('ru-RU', {day:'numeric', month:'long', weekday:'long'});
 
@@ -645,7 +645,7 @@ function revenueEntriesForDate(date){
     const prepay = Number(o.prepay)||0;
     const amount = Number(o.amount)||0;
     const remainder = amount - prepay;
-    const acceptedDate = o.acceptedDate || (o.createdAt ? new Date(o.createdAt).toISOString().slice(0,10) : o.date);
+    const acceptedDate = o.acceptedDate || (o.createdAt ? toDateStr(new Date(o.createdAt)) : o.date);
     const doneDate = o.doneAt || (o.done ? o.date : null); // подстраховка для старых заказов
     if(prepay>0 && acceptedDate===date){
       entries.push({order:o, type:'prepay', amount:prepay});
@@ -671,7 +671,7 @@ function computeRangeData(start,end){
   const expSum = rangeExpenses.reduce((s,e)=>s+(Number(e.amount)||0),0);
 
   const acceptedCount = orders.filter(o=>{
-    const acc = o.acceptedDate || (o.createdAt ? new Date(o.createdAt).toISOString().slice(0,10) : o.date);
+    const acc = o.acceptedDate || (o.createdAt ? toDateStr(new Date(o.createdAt)) : o.date);
     return acc>=start && acc<=end;
   }).length;
   const doneCount = orders.filter(o=>{
